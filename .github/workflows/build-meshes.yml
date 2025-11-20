@@ -115,7 +115,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # ---- UPLOAD ASSETS WITH FOLDER STRUCTURE ----
     - name: Upload meshes with folder structure preserved
       if: steps.changed.outputs.files != ''
       run: |
@@ -127,15 +126,15 @@ jobs:
 
         shopt -s globstar
         ANY=0
-        for f in meshes/**/*.msh; do
+        for f in **/*.msh; do
           [[ -f "$f" ]] || continue
+          [[ "$f" == .github/* ]] && continue  # skip workflow files
+
           ANY=1
 
           OUT="release_assets/$f"
 
-          # Mirror directory structure
           mkdir -p "$(dirname "$OUT")"
-
           cp "$f" "$OUT"
 
           echo "Prepared asset: $OUT"
@@ -149,3 +148,4 @@ jobs:
         fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
