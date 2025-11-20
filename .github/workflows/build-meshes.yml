@@ -18,15 +18,14 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write   # Required for creating releases + uploading assets
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
       with:
-        # we want at least HEAD and HEAD~1, and tags later
-        fetch-depth: 0
+        fetch-depth: 0   # we need tags + full history for semantic versioning
 
-    - name: Fetch tags
+    - name: Fetch all tags
       run: git fetch --tags --force
 
     - name: Install gmsh
@@ -38,22 +37,20 @@ jobs:
         echo "Manual full rebuild: '${{ github.event.inputs.full_rebuild }}'"
 
         if [[ "${{ github.event.inputs.full_rebuild }}" == "true" ]]; then
-          echo "Doing FULL rebuild: selecting ALL .geo files."
+          echo "FULL REBUILD: selecting ALL .geo files."
           CHANGED=$(git ls-files '**/*.geo')
         else
-          # Try diff, fallback to all files if HEAD~1 missing
           if git rev-parse HEAD~1 >/dev/null 2>&1; then
             CHANGED=$(git diff --name-only HEAD~1 HEAD -- '**/*.geo')
           else
-            echo "HEAD~1 missing — treating all .geo as changed."
+            echo "HEAD~1 missing — selecting all .geo."
             CHANGED=$(git ls-files '**/*.geo')
           fi
         fi
 
-        echo "CHANGED:"
+        echo "CHANGED FILES:"
         echo "$CHANGED"
 
-        # Load blacklist (one entry per line, e.g. "old" or "old/channel_2d_hole/mesh.geo")
         BLACKLIST=$(cat blacklist.txt | tr '\n' ' ')
         echo "BLACKLIST: $BLACKLIST"
 
@@ -61,8 +58,7 @@ jobs:
         for f in $CHANGED; do
           SKIP=0
           for b in $BLACKLIST; do
-            # If b is "old", this will skip any path starting with "old/"
-            # If b is a full file path, it will match exactly.
+            # Skip folder "old/" and any file or subpath inside it
             if [[ "$f" == "$b" || "$f" == "$b/"* ]]; then
               SKIP=1
               break
@@ -94,7 +90,6 @@ jobs:
     - name: Determine next version
       id: version
       run: |
-        # Get latest tag matching meshes-v*
         LATEST=$(git tag --list "meshes-v*" --sort=-v:refname | head -n 1)
         echo "Latest tag: $LATEST"
 
@@ -120,25 +115,37 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    # ---- UPLOAD ASSETS WITH FULL PATHS ----
+    # ---- UPLOAD ASSETS WITH FOLDER STRUCTURE ----
     - name: Upload meshes with folder structure preserved
       if: steps.changed.outputs.files != ''
       run: |
         TAG=${{ steps.version.outputs.tag }}
 
+        echo "Preparing assets for release $TAG"
+
+        mkdir -p release_assets
+
         shopt -s globstar
         ANY=0
-        for f in **/*.msh; do
-          # Skip workflow cruft
-          [[ "$f" == .github/* ]] && continue
+        for f in meshes/**/*.msh; do
           [[ -f "$f" ]] || continue
           ANY=1
-          echo "Uploading $f"
-          gh release upload "$TAG" "$f" --clobber --name "$f"
+
+          OUT="release_assets/$f"
+
+          # Mirror directory structure
+          mkdir -p "$(dirname "$OUT")"
+
+          cp "$f" "$OUT"
+
+          echo "Prepared asset: $OUT"
         done
 
         if [[ $ANY -eq 0 ]]; then
           echo "No .msh files found to upload."
+        else
+          echo "Uploading with gh release upload..."
+          gh release upload "$TAG" release_assets/** --clobber
         fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
