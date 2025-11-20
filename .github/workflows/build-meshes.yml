@@ -5,14 +5,20 @@ on:
     paths:
       - "**/*.geo"
       - "blacklist.txt"
+
   workflow_dispatch:
+    inputs:
+      full_rebuild:
+        description: "Rebuild ALL meshes (ignore git diff)?"
+        required: false
+        default: "false"
 
 jobs:
   build-meshes:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write   # Required for creating releases + uploading assets
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -22,16 +28,30 @@ jobs:
     - name: Install gmsh
       run: sudo apt-get update && sudo apt-get install -y gmsh
 
-    - name: Determine changed .geo files (excluding blacklist)
+    - name: Determine .geo files to process
       id: changed
       run: |
-        CHANGED=$(git diff --name-only HEAD~1 HEAD -- '*/*.geo')
+        echo "Manual full rebuild: ${{ github.event.inputs.full_rebuild }}"
 
-        echo "Changed GEO files:"
+        if [[ "${{ github.event.inputs.full_rebuild }}" == "true" ]]; then
+          echo "Doing FULL rebuild: selecting ALL .geo files."
+          CHANGED=$(git ls-files '**/*.geo')
+        else
+          # Try diff, fallback to all files if HEAD~1 missing
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            CHANGED=$(git diff --name-only HEAD~1 HEAD -- '**/*.geo')
+          else
+            echo "HEAD~1 missing — treating all .geo as changed."
+            CHANGED=$(git ls-files '**/*.geo')
+          fi
+        fi
+
+        echo "CHANGED:"
         echo "$CHANGED"
 
-        # read blacklist file
+        # Load blacklist
         BLACKLIST=$(cat blacklist.txt | tr '\n' ' ')
+        echo "BLACKLIST: $BLACKLIST"
 
         FILTERED=""
         for f in $CHANGED; do
@@ -42,7 +62,7 @@ jobs:
           [[ $SKIP == 0 ]] && FILTERED="$FILTERED $f"
         done
 
-        echo "Filtered GEO files:"
+        echo "FILES TO RUN:"
         echo "$FILTERED"
 
         echo "files=$FILTERED" >> $GITHUB_OUTPUT
@@ -52,15 +72,50 @@ jobs:
       run: |
         for f in ${{ steps.changed.outputs.files }}; do
           DIR=$(dirname "$f")
-          echo "Running run.sh in $DIR"
+          echo "Generating mesh in: $DIR"
           (cd "$DIR" && chmod +x run.sh && ./run.sh)
         done
 
+    # ---- SEMANTIC VERSIONING ----
+    - name: Determine next version
+      id: version
+      run: |
+        # Get latest tag matching meshes-v*
+        LATEST=$(git tag --list "meshes-v*" --sort=-v:refname | head -n 1)
+        echo "Latest tag: $LATEST"
+
+        if [[ -z "$LATEST" ]]; then
+          NEXT="meshes-v0.1.0"
+        else
+          # Extract version numbers
+          BASE=${LATEST#meshes-v}
+          IFS='.' read -r MAJ MIN PATCH <<< "$BASE"
+          PATCH=$((PATCH+1))
+          NEXT="meshes-v$MAJ.$MIN.$PATCH"
+        fi
+
+        echo "Next tag: $NEXT"
+        echo "tag=$NEXT" >> $GITHUB_OUTPUT
+
+    # ---- CREATE RELEASE ----
     - name: Create Release
       if: steps.changed.outputs.files != ''
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: meshes-${{ github.sha }}
-        name: "Meshes generated for commit ${{ github.sha }}"
-        files: |
-          **/*.msh
+        tag_name: ${{ steps.version.outputs.tag }}
+        name: "Meshes Release ${{ steps.version.outputs.tag }}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # ---- UPLOAD ASSETS WITH FULL PATHS ----
+    - name: Upload meshes with folder structure preserved
+      if: steps.changed.outputs.files != ''
+      run: |
+        TAG=${{ steps.version.outputs.tag }}
+
+        for f in meshes/**/*.msh; do
+          echo "Uploading $f"
+          gh release upload "$TAG" "$f" --clobber --name "$f"
+        done
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
