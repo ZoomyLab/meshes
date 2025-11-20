@@ -5,6 +5,7 @@ on:
     paths:
       - "**/*.geo"
       - "blacklist.txt"
+  workflow_dispatch:
 
 jobs:
   build-meshes:
