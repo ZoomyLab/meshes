@@ -18,12 +18,16 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
+      contents: write   # Required for creating releases + uploading assets
 
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 2
+        # we want at least HEAD and HEAD~1, and tags later
+        fetch-depth: 0
+
+    - name: Fetch tags
+      run: git fetch --tags --force
 
     - name: Install gmsh
       run: sudo apt-get update && sudo apt-get install -y gmsh
@@ -31,7 +35,7 @@ jobs:
     - name: Determine .geo files to process
       id: changed
       run: |
-        echo "Manual full rebuild: ${{ github.event.inputs.full_rebuild }}"
+        echo "Manual full rebuild: '${{ github.event.inputs.full_rebuild }}'"
 
         if [[ "${{ github.event.inputs.full_rebuild }}" == "true" ]]; then
           echo "Doing FULL rebuild: selecting ALL .geo files."
@@ -49,7 +53,7 @@ jobs:
         echo "CHANGED:"
         echo "$CHANGED"
 
-        # Load blacklist
+        # Load blacklist (one entry per line, e.g. "old" or "old/channel_2d_hole/mesh.geo")
         BLACKLIST=$(cat blacklist.txt | tr '\n' ' ')
         echo "BLACKLIST: $BLACKLIST"
 
@@ -57,7 +61,12 @@ jobs:
         for f in $CHANGED; do
           SKIP=0
           for b in $BLACKLIST; do
-            [[ "$f" == "$b" ]] && SKIP=1
+            # If b is "old", this will skip any path starting with "old/"
+            # If b is a full file path, it will match exactly.
+            if [[ "$f" == "$b" || "$f" == "$b/"* ]]; then
+              SKIP=1
+              break
+            fi
           done
           [[ $SKIP == 0 ]] && FILTERED="$FILTERED $f"
         done
@@ -73,7 +82,12 @@ jobs:
         for f in ${{ steps.changed.outputs.files }}; do
           DIR=$(dirname "$f")
           echo "Generating mesh in: $DIR"
-          (cd "$DIR" && chmod +x run.sh && ./run.sh)
+
+          if [[ -f "$DIR/run.sh" ]]; then
+            (cd "$DIR" && chmod +x run.sh && ./run.sh)
+          else
+            echo "::warning ::No run.sh found in '$DIR', skipping."
+          fi
         done
 
     # ---- SEMANTIC VERSIONING ----
@@ -87,7 +101,6 @@ jobs:
         if [[ -z "$LATEST" ]]; then
           NEXT="meshes-v0.1.0"
         else
-          # Extract version numbers
           BASE=${LATEST#meshes-v}
           IFS='.' read -r MAJ MIN PATCH <<< "$BASE"
           PATCH=$((PATCH+1))
@@ -113,9 +126,19 @@ jobs:
       run: |
         TAG=${{ steps.version.outputs.tag }}
 
-        for f in meshes/**/*.msh; do
+        shopt -s globstar
+        ANY=0
+        for f in **/*.msh; do
+          # Skip workflow cruft
+          [[ "$f" == .github/* ]] && continue
+          [[ -f "$f" ]] || continue
+          ANY=1
           echo "Uploading $f"
           gh release upload "$TAG" "$f" --clobber --name "$f"
         done
+
+        if [[ $ANY -eq 0 ]]; then
+          echo "No .msh files found to upload."
+        fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
