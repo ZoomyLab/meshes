@@ -1,4 +1,4 @@
-scale = 3.0;
+scale = 3.1;
 scaled = scale * 0.125;
 
 x0=-10;
