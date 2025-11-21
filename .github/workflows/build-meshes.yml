@@ -87,27 +87,14 @@ jobs:
       if: steps.changed.outputs.files != ''
       run: |
         echo "Generating H5 files from MSH using zoomy_jax_standalone..."
-
+    
         docker pull ghcr.io/zoomylab/zoomy_jax_standalone:latest
-
-        # Create script to run in docker
-        cat << 'EOF' > gen_h5.py
-import glob
-from pathlib import Path
-from zoomy_core.mesh.mesh import msh_to_h5
-
-files = glob.glob("**/*.msh", recursive=True)
-
-for f in files:
-    print(f"Converting {f} → h5")
-    msh_to_h5(f)
-EOF
-
+    
         docker run --rm \
           -v $PWD:/work \
           -w /work \
           ghcr.io/zoomylab/zoomy_jax_standalone:latest \
-          python gen_h5.py
+          python scripts/gen_h5.py
 
     # ---- SEMANTIC VERSIONING ----
     - name: Determine next version
