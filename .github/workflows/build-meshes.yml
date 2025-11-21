@@ -83,7 +83,6 @@ jobs:
           fi
         done
 
-    # ---- H5 GENERATION ----
     - name: Generate h5 from msh
       if: steps.changed.outputs.files != ''
       run: |
@@ -92,17 +91,15 @@ jobs:
         docker pull ghcr.io/zoomylab/zoomy_jax_standalone:latest
 
         # Create script to run in docker
-        cat << EOF > gen_h5.py
+        cat << 'EOF' > gen_h5.py
 import glob
 from pathlib import Path
-
 from zoomy_core.mesh.mesh import msh_to_h5
 
 files = glob.glob("**/*.msh", recursive=True)
 
 for f in files:
-    out = Path(f).with_suffix(".h5")
-    print(f"Converting {f} -> {out}")
+    print(f"Converting {f} → h5")
     msh_to_h5(f)
 EOF
 
