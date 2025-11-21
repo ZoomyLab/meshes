@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       full_rebuild:
+        type: boolean
         description: "Rebuild ALL meshes (ignore git diff)?"
-        required: false
-        default: "false"
+        default: false
 
 jobs:
   build-meshes:
