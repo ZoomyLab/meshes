@@ -94,7 +94,7 @@ jobs:
           -v $PWD:/work \
           -w /work \
           ghcr.io/zoomylab/zoomy_jax_standalone:latest \
-          python scripts/gen_h5.py
+          python generate_h5.py
 
     # ---- SEMANTIC VERSIONING ----
     - name: Determine next version
