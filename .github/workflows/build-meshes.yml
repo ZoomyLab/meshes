@@ -23,7 +23,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0   # we need tags + full history for semantic versioning
+        fetch-depth: 0
 
     - name: Fetch all tags
       run: git fetch --tags --force
@@ -37,13 +37,11 @@ jobs:
         echo "Manual full rebuild: '${{ github.event.inputs.full_rebuild }}'"
 
         if [[ "${{ github.event.inputs.full_rebuild }}" == "true" ]]; then
-          echo "FULL REBUILD: selecting ALL .geo files."
           CHANGED=$(git ls-files '**/*.geo')
         else
           if git rev-parse HEAD~1 >/dev/null 2>&1; then
             CHANGED=$(git diff --name-only HEAD~1 HEAD -- '**/*.geo')
           else
-            echo "HEAD~1 missing — selecting all .geo."
             CHANGED=$(git ls-files '**/*.geo')
           fi
         fi
@@ -58,7 +56,6 @@ jobs:
         for f in $CHANGED; do
           SKIP=0
           for b in $BLACKLIST; do
-            # Skip folder "old/" and any file or subpath inside it
             if [[ "$f" == "$b" || "$f" == "$b/"* ]]; then
               SKIP=1
               break
@@ -86,6 +83,35 @@ jobs:
           fi
         done
 
+    # ---- H5 GENERATION ----
+    - name: Generate h5 from msh
+      if: steps.changed.outputs.files != ''
+      run: |
+        echo "Generating H5 files from MSH using zoomy_jax_standalone..."
+
+        docker pull ghcr.io/zoomylab/zoomy_jax_standalone:latest
+
+        # Create script to run in docker
+        cat << EOF > gen_h5.py
+import glob
+from pathlib import Path
+
+from zoomy_core.mesh.mesh import msh_to_h5
+
+files = glob.glob("**/*.msh", recursive=True)
+
+for f in files:
+    out = Path(f).with_suffix(".h5")
+    print(f"Converting {f} -> {out}")
+    msh_to_h5(f)
+EOF
+
+        docker run --rm \
+          -v $PWD:/work \
+          -w /work \
+          ghcr.io/zoomylab/zoomy_jax_standalone:latest \
+          python gen_h5.py
+
     # ---- SEMANTIC VERSIONING ----
     - name: Determine next version
       id: version
@@ -105,7 +131,6 @@ jobs:
         echo "Next tag: $NEXT"
         echo "tag=$NEXT" >> $GITHUB_OUTPUT
 
-    # ---- CREATE RELEASE ----
     - name: Create Release
       if: steps.changed.outputs.files != ''
       uses: softprops/action-gh-release@v2
@@ -115,36 +140,34 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Upload meshes with folder structure preserved
+    - name: Upload meshes + geos + h5 with safe naming
       if: steps.changed.outputs.files != ''
       run: |
         TAG=${{ steps.version.outputs.tag }}
         echo "Preparing assets for release $TAG"
 
         mkdir -p release_assets
-
         shopt -s globstar
         ANY=0
-        for f in **/*.msh; do
-          [[ -f "$f" ]] || continue
-          [[ "$f" == .github/* ]] && continue
 
-          ANY=1
+        # Handle geo, msh, h5
+        for EXT in geo msh h5; do
+          for f in **/*.$EXT; do
+            [[ -f "$f" ]] || continue
+            [[ "$f" == .github/* ]] && continue
+            ANY=1
 
-          # Convert directory path into safe filename
-          SAFE_NAME=$(echo "$f" | tr '/' '__')
+            SAFE_NAME=$(echo "$f" | tr '/' '__')
+            OUT="release_assets/$SAFE_NAME"
 
-          OUT="release_assets/$SAFE_NAME"
-
-          cp "$f" "$OUT"
-
-          echo "Prepared upload: $f  →  $SAFE_NAME"
+            cp "$f" "$OUT"
+            echo "Prepared: $f → $SAFE_NAME"
+          done
         done
 
         if [[ $ANY -eq 0 ]]; then
-          echo "No .msh files found to upload."
+          echo "Nothing to upload."
         else
-          echo "Uploading with gh release upload..."
           gh release upload "$TAG" release_assets/* --clobber
         fi
       env:
