@@ -1,4 +1,4 @@
-name: Meshes
+name: Build Meshes and Upload to Release
 
 on:
   push:
@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       full_rebuild:
-        type: boolean
         description: "Rebuild ALL meshes (ignore git diff)?"
-        default: false
+        required: false
+        default: "false"
 
 jobs:
   build-meshes:
