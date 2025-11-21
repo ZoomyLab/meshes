@@ -129,30 +129,48 @@ jobs:
       run: |
         TAG=${{ steps.version.outputs.tag }}
         echo "Preparing assets for release $TAG"
-
+    
         mkdir -p release_assets
         shopt -s globstar
         ANY=0
-
+    
+        # Read blacklist
+        BLACKLIST=$(cat blacklist.txt | tr '\n' ' ')
+        echo "BLACKLIST: $BLACKLIST"
+    
         # Handle geo, msh, h5
         for EXT in geo msh h5; do
           for f in **/*.$EXT; do
             [[ -f "$f" ]] || continue
             [[ "$f" == .github/* ]] && continue
+    
+            # Apply blacklist filter
+            SKIP=0
+            for b in $BLACKLIST; do
+              if [[ "$f" == "$b" || "$f" == "$b/"* ]]; then
+                SKIP=1
+                break
+              fi
+            done
+            [[ $SKIP == 1 ]] && continue
+    
             ANY=1
-
             SAFE_NAME=$(echo "$f" | tr '/' '__')
             OUT="release_assets/$SAFE_NAME"
-
+    
             cp "$f" "$OUT"
             echo "Prepared: $f → $SAFE_NAME"
           done
         done
-
+    
         if [[ $ANY -eq 0 ]]; then
           echo "Nothing to upload."
         else
-          gh release upload "$TAG" release_assets/* --clobber
+          # Upload files one by one (prevents 400 errors)
+          for f in release_assets/*; do
+            echo "Uploading: $f"
+            gh release upload "$TAG" "$f" --clobber
+          done
         fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
