@@ -1,4 +1,4 @@
-name: Build Meshes and Upload to Release
+name: Meshes
 
 on:
   push:
