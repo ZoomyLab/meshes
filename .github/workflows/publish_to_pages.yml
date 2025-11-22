@@ -45,6 +45,17 @@ jobs:
             curl -L "$asset_url" -o "docs/meshes/$fname"
           done
 
+
+          echo "[" > docs/index.json
+          FIRST=1
+          for f in docs/meshes/*; do
+              NAME=$(basename "$f")
+              if [[ $FIRST -eq 0 ]]; then echo "," >> docs/index.json; fi
+              echo "  \"$NAME\"" >> docs/index.json
+              FIRST=0
+          done
+          echo "]" >> docs/index.json
+
       - name: Add basic index.html
         run: |
           cat > docs/index.html <<EOF
