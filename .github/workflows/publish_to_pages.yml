@@ -1,0 +1,66 @@
+name: Publish Meshes to GitHub Pages
+
+on:
+  workflow_run:
+    workflows: ["Build Meshes and Upload to Release"]
+    types:
+      - completed
+
+  workflow_dispatch:
+
+jobs:
+  publish-pages:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get latest release metadata
+        id: release
+        run: |
+          API="https://api.github.com/repos/${{ github.repository }}/releases/latest"
+          echo "Fetching: $API"
+          JSON=$(curl -s $API)
+          echo "$JSON" > latest.json
+          
+          TAG=$(echo "$JSON" | jq -r .tag_name)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Prepare docs folder
+        run: |
+          rm -rf docs
+          mkdir -p docs/meshes
+
+      - name: Download assets from latest release
+        run: |
+          for asset_url in $(jq -r '.assets[].browser_download_url' latest.json); do
+            fname=$(basename "$asset_url")
+            echo "Downloading $fname"
+            curl -L "$asset_url" -o "docs/meshes/$fname"
+          done
+
+      - name: Add basic index.html (optional)
+        run: |
+          cat > docs/index.html <<EOF
+          <html><body>
+          <h1>Meshes</h1>
+          <ul>
+          $(for f in docs/meshes/*; do echo "<li><a href=\"meshes/$(basename $f)\">$(basename $f)</a></li>"; done)
+          </ul>
+          </body></html>
+          EOF
+
+      - name: Upload to GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v1
+
