@@ -1,4 +1,5 @@
-scale = 3.0;
+DefineConstant[ size_factor = {1, Name "size_factor"} ];
+scale = 3.0 / size_factor;
 scaled = scale * 0.125;
 
 x0=-10;

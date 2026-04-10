@@ -1,16 +1,20 @@
 DefineConstant[ size_factor = {1, Name "size_factor"} ];
 scale = 1;
-dx = Round(100/scale * size_factor);
-dy = Round(10/scale * size_factor);
+dx = Round(101/scale * size_factor);
+dy = Round(11/scale * size_factor);
+dz = Round(11/scale * size_factor);
 
-Point(10) = {0, 0,  0, scale};
-Point(11) = {10, 0,  0, scale};
-Point(20) = {0, 1, 0, scale};
-Point(21) = {10, 1, 0, scale};
-Point(30) = {0, 0,  1, scale};
-Point(31) = {10, 0,  1, scale};
-Point(40) = {0, 1, 1, scale};
-Point(41) = {10, 1, 1, scale};
+x0 = 8;
+x1 = 18;
+
+Point(10) = {x0, 0,  0, scale};
+Point(11) = {x1, 0,  0, scale};
+Point(20) = {x0, 1, 0, scale};
+Point(21) = {x1, 1, 0, scale};
+Point(30) = {x0, 0,  1, scale};
+Point(31) = {x1, 0,  1, scale};
+Point(40) = {x0, 1, 1, scale};
+Point(41) = {x1, 1, 1, scale};
 
 
 // bottom
@@ -46,7 +50,7 @@ Plane Surface(2003) = {1003};
 Plane Surface(2004) = {1004};
 Plane Surface(2005) = {1005};
 
-Transfinite Line {311, 312, 313, 314 } = 1;
+Transfinite Line {311, 312, 313, 314 } = dz;
 Transfinite Line {111, 112, 211, 212} = dx;
 Transfinite Line {114, 214, 113, 213} = dy;
 
@@ -59,7 +63,10 @@ Recombine Surface "*";
 Recombine Volume "*";
 
 
-Physical Surface("wall", 5002) = {2002, 2003};
+Physical Surface("top", 5000) = {2000};
+Physical Surface("bottom", 5001) = {2001};
+Physical Surface("front_wall", 5002) = {2002};
+Physical Surface("back_wall", 5003) = {2003};
 Physical Surface("inflow", 5004) = {2004};
 Physical Surface("outflow", 5005) = {2005};
 

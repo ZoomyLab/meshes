@@ -1,12 +1,13 @@
 DefineConstant[ size_factor = {1, Name "size_factor"} ];
-scale = 0.5 / size_factor;
-scaled = scale * 0.125;
+scale = 0.125 / size_factor;
 
-Point(10) = {0, 0,  0, scaled};
-Point(11) = {10, 0,  0, scaled};
+x0 = 8;
+x1 = 18;
+Point(10) = {x0, 0,  0, scale};
+Point(11) = {x1, 0,  0, scale};
 
-Point(20) = {0, 1, 0, scaled};
-Point(21) = {10, 1, 0, scaled};
+Point(20) = {x0, 1, 0, scale};
+Point(21) = {x1, 1, 0, scale};
 
 
 Line(111) = {10, 11};

@@ -1,6 +1,7 @@
+DefineConstant[ size_factor = {1, Name "size_factor"} ];
 scale = 1;
-dx = 100/scale;
-dy = 10/scale;
+dx = Round(100/scale * size_factor);
+dy = Round(10/scale * size_factor);
 
 Point(10) = {0, 0,  0, scale};
 Point(11) = {10, 0,  0, scale};

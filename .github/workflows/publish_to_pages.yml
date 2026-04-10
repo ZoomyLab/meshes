@@ -45,16 +45,46 @@ jobs:
             curl -L "$asset_url" -o "docs/meshes/$fname"
           done
 
+      - name: Generate structured index.json
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, re
 
-          echo "[" > docs/index.json
-          FIRST=1
-          for f in docs/meshes/*; do
-              NAME=$(basename "$f")
-              if [[ $FIRST -eq 0 ]]; then echo "," >> docs/index.json; fi
-              echo "  \"$NAME\"" >> docs/index.json
-              FIRST=0
-          done
-          echo "]" >> docs/index.json
+          files = sorted(f for f in os.listdir("docs/meshes") if os.path.isfile(os.path.join("docs/meshes", f)))
+          meshes = {}
+          SIZE_LABELS = {"coarse", "medium", "fine"}
+
+          for f in files:
+              name, dot, ext = f.rpartition(".")
+              if not dot:
+                  continue
+
+              # Parse: base__size.ext or base.ext
+              m = re.match(r"^(.+)__(" + "|".join(SIZE_LABELS) + r")$", name)
+              if m:
+                  base, size = m.group(1), m.group(2)
+              else:
+                  base, size = name, None
+
+              if base not in meshes:
+                  meshes[base] = {"sizes": set(), "types": set()}
+              meshes[base]["types"].add(ext)
+              if size:
+                  meshes[base]["sizes"].add(size)
+
+          index = {
+              "version": 2,
+              "files": files,
+              "meshes": {
+                  k: {"sizes": sorted(v["sizes"]), "types": sorted(v["types"])}
+                  for k, v in sorted(meshes.items())
+              },
+          }
+
+          with open("docs/index.json", "w") as fh:
+              json.dump(index, fh, indent=2)
+          print(f"index.json: {len(meshes)} meshes, {len(files)} files")
+          PYEOF
 
       - name: Add basic index.html
         run: |

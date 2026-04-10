@@ -3,14 +3,16 @@ scale = 1;
 dx = Round(100/scale * size_factor);
 dy = Round(10/scale * size_factor);
 
-Point(10) = {0, 0,  0, scale};
-Point(11) = {10, 0,  0, scale};
-Point(20) = {0, 1, 0, scale};
-Point(21) = {10, 1, 0, scale};
-Point(30) = {0, 0,  1, scale};
-Point(31) = {10, 0,  1, scale};
-Point(40) = {0, 1, 1, scale};
-Point(41) = {10, 1, 1, scale};
+x0 = 8;
+x1 = 18;
+Point(10) = {x0, 0,  0, scale};
+Point(11) = {x1, 0,  0, scale};
+Point(20) = {x0, 1, 0, scale};
+Point(21) = {x1, 1, 0, scale};
+Point(30) = {x0, 0,  1, scale};
+Point(31) = {x1, 0,  1, scale};
+Point(40) = {x0, 1, 1, scale};
+Point(41) = {x1, 1, 1, scale};
 
 
 // bottom

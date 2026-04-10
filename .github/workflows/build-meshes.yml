@@ -69,18 +69,48 @@ jobs:
 
         echo "files=$FILTERED" >> $GITHUB_OUTPUT
 
-    - name: Run mesh generation
+    - name: Run mesh generation (multi-size)
       if: steps.changed.outputs.files != ''
       run: |
+        declare -A SIZE_MAP
+        SIZE_MAP[coarse]=0.25
+        SIZE_MAP[medium]=1
+        SIZE_MAP[fine]=4
+
+        # Collect unique directories
+        DIRS=""
         for f in ${{ steps.changed.outputs.files }}; do
           DIR=$(dirname "$f")
-          echo "Generating mesh in: $DIR"
-
-          if [[ -f "$DIR/run.sh" ]]; then
-            (cd "$DIR" && chmod +x run.sh && ./run.sh)
-          else
-            echo "::warning ::No run.sh found in '$DIR', skipping."
+          if [[ ! " $DIRS " =~ " $DIR " ]]; then
+            DIRS="$DIRS $DIR"
           fi
+        done
+
+        for DIR in $DIRS; do
+          if [[ ! -f "$DIR/run.sh" ]]; then
+            echo "::warning ::No run.sh in '$DIR', skipping."
+            continue
+          fi
+
+          for SIZE_LABEL in coarse medium fine; do
+            FACTOR=${SIZE_MAP[$SIZE_LABEL]}
+            echo "=== $DIR | $SIZE_LABEL (factor=$FACTOR) ==="
+            (cd "$DIR" && chmod +x run.sh && ./run.sh "$FACTOR")
+
+            # Rename outputs with size suffix
+            for msh in "$DIR"/*.msh; do
+              [[ -f "$msh" ]] || continue
+              BASE="${msh%.msh}"
+              mv "$msh" "${BASE}__${SIZE_LABEL}.msh"
+            done
+          done
+
+          # Create unsuffixed copies for "medium" (backward compat)
+          for msh in "$DIR"/*__medium.msh; do
+            [[ -f "$msh" ]] || continue
+            COMPAT="${msh//__medium/}"
+            cp "$msh" "$COMPAT"
+          done
         done
 
     - name: Generate h5 from msh
