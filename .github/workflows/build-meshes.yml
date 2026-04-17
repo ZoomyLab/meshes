@@ -72,6 +72,11 @@ jobs:
     - name: Run mesh generation (multi-size)
       if: steps.changed.outputs.files != ''
       run: |
+        # Don't abort the step on per-directory failures. One broken .geo
+        # (e.g. an unmeshable transfinite surface) must not prevent the
+        # rest of the catalog from building.
+        set +e
+
         declare -A SIZE_MAP
         SIZE_MAP[coarse]=0.25
         SIZE_MAP[medium]=1
@@ -86,6 +91,7 @@ jobs:
           fi
         done
 
+        FAILED_DIRS=""
         for DIR in $DIRS; do
           if [[ ! -f "$DIR/run.sh" ]]; then
             echo "::warning ::No run.sh in '$DIR', skipping."
@@ -96,11 +102,20 @@ jobs:
             FACTOR=${SIZE_MAP[$SIZE_LABEL]}
             echo "=== $DIR | $SIZE_LABEL (factor=$FACTOR) ==="
             (cd "$DIR" && chmod +x run.sh && ./run.sh "$FACTOR")
+            RC=$?
+            if [[ $RC -ne 0 ]]; then
+              echo "::warning ::$DIR failed for size=$SIZE_LABEL (exit $RC); continuing."
+              FAILED_DIRS="$FAILED_DIRS $DIR#$SIZE_LABEL"
+            fi
 
-            # Rename outputs with size suffix
+            # Rename any outputs that did get produced with size suffix
             for msh in "$DIR"/*.msh; do
               [[ -f "$msh" ]] || continue
               BASE="${msh%.msh}"
+              # Skip already-renamed ones from a previous failed size
+              if [[ "$msh" == *__coarse.msh || "$msh" == *__medium.msh || "$msh" == *__fine.msh ]]; then
+                continue
+              fi
               mv "$msh" "${BASE}__${SIZE_LABEL}.msh"
             done
           done
@@ -112,6 +127,12 @@ jobs:
             cp "$msh" "$COMPAT"
           done
         done
+
+        if [[ -n "$FAILED_DIRS" ]]; then
+          echo "::warning ::Some directories failed: $FAILED_DIRS"
+        fi
+        # Always exit 0 — partial catalog is better than no catalog.
+        exit 0
 
     - name: Generate h5 from msh
       if: steps.changed.outputs.files != ''
