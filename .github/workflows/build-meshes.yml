@@ -136,16 +136,23 @@ jobs:
 
     - name: Generate h5 from msh
       if: steps.changed.outputs.files != ''
+      continue-on-error: true
       run: |
         echo "Generating H5 files from MSH using zoomy_jax_standalone..."
-    
+        set +e
+
         docker pull ghcr.io/zoomylab/zoomy_jax_standalone:latest
-    
+
         docker run --rm \
           -v $PWD:/work \
           -w /work \
           ghcr.io/zoomylab/zoomy_jax_standalone:latest \
           python generate_h5.py
+        RC=$?
+        if [[ $RC -ne 0 ]]; then
+          echo "::warning ::H5 conversion failed (exit $RC). .msh artifacts will still be uploaded."
+        fi
+        exit 0
 
     # ---- SEMANTIC VERSIONING ----
     - name: Determine next version
