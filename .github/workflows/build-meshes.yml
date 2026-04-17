@@ -224,11 +224,33 @@ jobs:
         if [[ $ANY -eq 0 ]]; then
           echo "Nothing to upload."
         else
-          # Upload files one by one (prevents 400 errors)
+          # Upload files one by one. Never abort the whole loop on a single
+          # failed upload: GitHub's 2 GiB-per-asset limit means the largest
+          # meshes legitimately can't be released, and we still want the
+          # rest to land.
+          set +e
+          MAX_SIZE=$((2 * 1024 * 1024 * 1024))   # 2 GiB
+          FAILED=0
+          SKIPPED_LARGE=0
+          UPLOADED=0
           for f in release_assets/*; do
+            SZ=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f")
+            if [[ -n "$SZ" && $SZ -ge $MAX_SIZE ]]; then
+              echo "::warning ::$(basename "$f") is ${SZ} bytes, above GitHub's 2 GiB limit — skipping."
+              SKIPPED_LARGE=$((SKIPPED_LARGE + 1))
+              continue
+            fi
             echo "Uploading: $f"
             gh release upload "$TAG" "$f" --clobber
+            if [[ $? -ne 0 ]]; then
+              echo "::warning ::Upload failed for $f; continuing."
+              FAILED=$((FAILED + 1))
+            else
+              UPLOADED=$((UPLOADED + 1))
+            fi
           done
+          echo "Uploaded: $UPLOADED   Skipped (>2 GiB): $SKIPPED_LARGE   Failed: $FAILED"
+          exit 0
         fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
