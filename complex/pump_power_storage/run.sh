@@ -6,8 +6,8 @@ for geo in channel_standalone.geo inflow_standalone.geo monolithic.geo channel_2
     base="${geo%.geo}"
     echo "Generating mesh: $base (size_factor=$SIZE_FACTOR)"
     if [[ "$base" == "channel_2d" ]]; then
-        gmsh -2 "$geo" -setnumber size_factor "$SIZE_FACTOR" -o "${base}.msh"
+        gmsh -2 -bin "$geo" -setnumber size_factor "$SIZE_FACTOR" -o "${base}.msh"
     else
-        gmsh -3 "$geo" -setnumber size_factor "$SIZE_FACTOR" -o "${base}.msh"
+        gmsh -3 -bin "$geo" -setnumber size_factor "$SIZE_FACTOR" -o "${base}.msh"
     fi
 done

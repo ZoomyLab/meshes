@@ -12,6 +12,10 @@ on:
         description: "Rebuild ALL meshes (ignore git diff)?"
         required: false
         default: "false"
+      max_msh_mb:
+        description: "Max .msh size in MiB; files above this are skipped"
+        required: false
+        default: "1024"
 
 jobs:
   build-meshes:
@@ -225,20 +229,34 @@ jobs:
           echo "Nothing to upload."
         else
           # Upload files one by one. Never abort the whole loop on a single
-          # failed upload: GitHub's 2 GiB-per-asset limit means the largest
-          # meshes legitimately can't be released, and we still want the
-          # rest to land.
+          # failed upload. Two size gates:
+          #  * MAX_MB  : practical limit from the workflow input (default 1 GiB)
+          #  * HARD    : GitHub's hard 2 GiB-per-asset cap.
           set +e
-          MAX_SIZE=$((2 * 1024 * 1024 * 1024))   # 2 GiB
+          MAX_MB=${{ github.event.inputs.max_msh_mb || '1024' }}
+          MAX_MB_BYTES=$((MAX_MB * 1024 * 1024))
+          HARD=$((2 * 1024 * 1024 * 1024))   # 2 GiB
           FAILED=0
-          SKIPPED_LARGE=0
+          SKIPPED_PRACTICAL=0
+          SKIPPED_HARD=0
           UPLOADED=0
           for f in release_assets/*; do
             SZ=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f")
-            if [[ -n "$SZ" && $SZ -ge $MAX_SIZE ]]; then
-              echo "::warning ::$(basename "$f") is ${SZ} bytes, above GitHub's 2 GiB limit — skipping."
-              SKIPPED_LARGE=$((SKIPPED_LARGE + 1))
+            if [[ -n "$SZ" && $SZ -ge $HARD ]]; then
+              echo "::warning ::$(basename "$f") is ${SZ} bytes, above GitHub's 2 GiB hard cap — skipping."
+              SKIPPED_HARD=$((SKIPPED_HARD + 1))
               continue
+            fi
+            # Apply the practical cap only to .msh/.h5 artefacts — .geo
+            # sources are always small and never trip this.
+            if [[ -n "$SZ" && $SZ -ge $MAX_MB_BYTES ]]; then
+              case "$f" in
+                *.msh|*.h5)
+                  echo "::warning ::$(basename "$f") is $((SZ / 1024 / 1024)) MiB (max_msh_mb=$MAX_MB) — skipping."
+                  SKIPPED_PRACTICAL=$((SKIPPED_PRACTICAL + 1))
+                  continue
+                  ;;
+              esac
             fi
             echo "Uploading: $f"
             gh release upload "$TAG" "$f" --clobber
@@ -249,7 +267,7 @@ jobs:
               UPLOADED=$((UPLOADED + 1))
             fi
           done
-          echo "Uploaded: $UPLOADED   Skipped (>2 GiB): $SKIPPED_LARGE   Failed: $FAILED"
+          echo "Uploaded: $UPLOADED   Skipped (>${MAX_MB} MiB): $SKIPPED_PRACTICAL   Skipped (>2 GiB hard): $SKIPPED_HARD   Failed: $FAILED"
           exit 0
         fi
       env:
