@@ -126,7 +126,11 @@ for part, blocks in PARTS.items():
         gmsh.model.geo.mesh.setRecombine(2, surf[b])
     gmsh.model.geo.synchronize()
     EDGE = {0:(0,1),1:(1,2),2:(2,3),3:(3,0)}
-    for name, bes in edges_for(part).items():
+    # ALPHABETICAL physical-group creation: the jax mesh loader numbers
+    # boundary functions by ascending physical id while the core BC container
+    # sorts tags by name — creation order must be alphabetical or the BC↔patch
+    # pairing silently permutes (outflow became a wall).
+    for name, bes in sorted(edges_for(part).items()):
         ids = []
         for b, e in bes:
             cs = BLOCKS[b][0]; i,j = EDGE[e]
@@ -162,7 +166,7 @@ for part, blocks in PARTS.items():
             e = abs(line(cs[EDGE[k][0]], cs[EDGE[k][1]]))
             side_of.setdefault(e, ext[i+2+k][1])
         i += 6
-    for name, bes in edges_for(part).items():
+    for name, bes in sorted(edges_for(part).items()):
         ids = [side_of[abs(line(BLOCKS[b][0][EDGE[e][0]], BLOCKS[b][0][EDGE[e][1]]))]
                for b, e in bes]
         gmsh.model.addPhysicalGroup(2, ids, name=name)
