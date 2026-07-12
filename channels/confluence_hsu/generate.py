@@ -178,3 +178,62 @@ for part, blocks in PARTS.items():
     gmsh.write(os.path.join(here, out3))
     print(f"{part:14s} -> {out3}")
     gmsh.finalize()
+
+# ── VOF variant: full mesh extruded with resolved vertical layers ───────────
+# (separate gmsh model: N_LAYER-layer extrusion to H_DOM; groups: bottom,
+#  atmosphere (top), wall (sides), inflow_main/inflow_branch/outflow)
+H_DOM, N_LAYER = 0.20, 24
+gmsh.initialize()
+gmsh.option.setNumber("General.Terminal", 0)
+gmsh.model.add("vof")
+pt, ln = {}, {}
+def line(a, b_):
+    if (a, b_) in ln: return ln[(a, b_)]
+    if (b_, a) in ln: return -ln[(b_, a)]
+    ln[(a, b_)] = gmsh.model.geo.addLine(pt[a], pt[b_])
+    return ln[(a, b_)]
+blocks = PARTS["full"]
+for b in blocks:
+    for c in BLOCKS[b][0]:
+        if c not in pt:
+            x, y = P[c]
+            pt[c] = gmsh.model.geo.addPoint(x, y, 0)
+surf = {}
+EDGE = {0:(0,1),1:(1,2),2:(2,3),3:(3,0)}
+for b in blocks:
+    (bl,br,tr,tl),(nx,ny) = BLOCKS[b]
+    e0,e1,e2,e3 = line(bl,br), line(br,tr), line(tr,tl), line(tl,bl)
+    cl = gmsh.model.geo.addCurveLoop([e0,e1,e2,e3])
+    surf[b] = gmsh.model.geo.addPlaneSurface([cl])
+    for e,n in ((e0,nx),(e2,nx),(e1,ny),(e3,ny)):
+        gmsh.model.geo.mesh.setTransfiniteCurve(abs(e), n)
+    gmsh.model.geo.mesh.setTransfiniteSurface(surf[b])
+    gmsh.model.geo.mesh.setRecombine(2, surf[b])
+gmsh.model.geo.synchronize()
+ext = gmsh.model.geo.extrude([(2, s) for s in surf.values()], 0, 0, H_DOM,
+                             numElements=[N_LAYER], recombine=True)
+gmsh.model.geo.synchronize()
+tops, vols, side_of = [], [], {}
+i = 0
+for b in blocks:
+    tops.append(ext[i][1]); vols.append(ext[i+1][1])
+    cs = BLOCKS[b][0]
+    for k in range(4):
+        e = abs(line(cs[EDGE[k][0]], cs[EDGE[k][1]]))
+        side_of.setdefault(e, ext[i+2+k][1])
+    i += 6
+for name, bes in sorted(edges_for("full").items()):
+    ids = [side_of[abs(line(BLOCKS[b][0][EDGE[e][0]], BLOCKS[b][0][EDGE[e][1]]))]
+           for b, e in bes]
+    gmsh.model.addPhysicalGroup(2, ids, name=name)
+gmsh.model.addPhysicalGroup(2, list(surf.values()), name="bottom")
+gmsh.model.addPhysicalGroup(2, tops, name="atmosphere")
+gmsh.model.addPhysicalGroup(3, vols, name="domain")
+gmsh.model.mesh.generate(3)
+gmsh.option.setNumber("Mesh.MshFileVersion", 2.2)
+import os as _os
+gmsh.write(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "mesh_vof.msh"))
+nn = len(gmsh.model.mesh.getNodes()[0])
+print(f"vof            -> mesh_vof.msh          {nn} nodes "
+      f"({N_LAYER} layers to z={H_DOM})")
+gmsh.finalize()
