@@ -1,3 +1,7 @@
+// This bend is exported TWICE by run.sh: the 4.1 binary mesh.msh and a
+// flat gmsh 2.2 mesh_v2.msh. LSQMesh.from_msh reads only the first entity
+// block of a 4.1 file, and this surface is 14 transfinite patches, so the
+// binary export loads a fragment of the bend (14 / 143 cells against 710).
 DefineConstant[ size_factor = {1, Name "size_factor"} ];
 cl = 1.0 / size_factor;
 
